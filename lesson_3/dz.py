@@ -134,7 +134,8 @@ class AirTransport(Transport):
 class DistanceCalculator:
     @staticmethod
     def calculate_distance(warehouse1: Warehouse, warehouse2: Warehouse) -> float:
-        addresses = [warehouse1.address.lower(), warehouse2.address.lower()]
+        if warehouse1.id == warehouse2.id:
+            return 0.0
         return random.uniform(50, 500)
 
 
@@ -168,6 +169,7 @@ class Delivery:
         self.waypoints = waypoints or []
         self.transport = transport
         self.status = "pending"
+        self.distance: Optional[float] = None
         self.cost: Optional[float] = None
         self.estimated_time: Optional[timedelta] = None
         self.actual_departure: Optional[datetime] = None
@@ -175,10 +177,11 @@ class Delivery:
 
     def calculate_delivery_details(self):
         calculator = CostCalculator()
-        distance = self._calculate_total_distance()
+        if self.distance is None:
+            self.distance = self._calculate_total_distance()
 
-        self.cost = calculator.calculate_cost(self.transport, self.cargo, distance)
-        self.estimated_time = calculator.calculate_time(distance, self.transport.speed)
+        self.cost = calculator.calculate_cost(self.transport, self.cargo, self.distance)
+        self.estimated_time = calculator.calculate_time(self.distance, self.transport.speed)
 
     def _calculate_total_distance(self) -> float:
         calculator = DistanceCalculator()
@@ -196,13 +199,19 @@ class Delivery:
 
         return total_distance
 
-    def start_delivery(self):
+    def start_delivery(self) -> bool:
+        if self.status != "pending":
+            return False
         self.status = "in_transit"
         self.actual_departure = datetime.now()
+        return True
 
-    def complete_delivery(self):
+    def complete_delivery(self) -> bool:
+        if self.status != "in_transit":
+            return False
         self.status = "delivered"
         self.actual_arrival = datetime.now()
+        return True
 
     def get_route_info(self) -> str:
         route = [self.origin.name]
@@ -211,7 +220,7 @@ class Delivery:
         return " -> ".join(route)
 
     def __str__(self):
-        return f"Доствка #{self.id}: {self.cargo} по маршруту {self.get_route_info()}"
+        return f"Доставка #{self.id}: {self.cargo} по маршруту {self.get_route_info()}"
 
 
 class TransportationSystem:
@@ -245,11 +254,11 @@ class TransportationSystem:
             raise ValueError("Выбранный транспорт не может перевозить данный груз")
 
         waypoints = []
-        if waypoint_ids:
-            for wp_id in waypoint_ids:
-                warehouse = self.warehouses.get(wp_id)
-                if warehouse:
-                    waypoints.append(warehouse)
+        for wp_id in waypoint_ids or []:
+            warehouse = self.warehouses.get(wp_id)
+            if warehouse is None:
+                raise ValueError(f"Неизвестный ID промежуточного склада: {wp_id}")
+            waypoints.append(warehouse)
 
         delivery = Delivery(self.delivery_counter, cargo, origin, destination, transport, waypoints)
         delivery.calculate_delivery_details()
@@ -281,18 +290,16 @@ class TransportationSystem:
             'actual_arrival': delivery.actual_arrival
         }
 
-    def start_delivery(self, delivery_id: int):
+    def start_delivery(self, delivery_id: int) -> bool:
         delivery = self.deliveries.get(delivery_id)
         if delivery:
-            delivery.start_delivery()
-            return True
+            return delivery.start_delivery()
         return False
 
-    def complete_delivery(self, delivery_id: int):
+    def complete_delivery(self, delivery_id: int) -> bool:
         delivery = self.deliveries.get(delivery_id)
         if delivery:
-            delivery.complete_delivery()
-            return True
+            return delivery.complete_delivery()
         return False
 
     def get_all_deliveries(self) -> List[Delivery]:
@@ -335,14 +342,14 @@ def main():
         print(f"{delivery1}")
         print(f"Стоимость: {delivery1.cost} руб.")
         print(f"Время доставки: {delivery1.estimated_time}")
-        print(f"Расстояние: {delivery1._calculate_total_distance():.1f} км")
+        print(f"Расстояние: {delivery1.distance:.1f} км")
 
         print("\n2.Мульти-доставка:")
         delivery2 = system.create_delivery(2, 1, 2, 3, [3])
         print(f"{delivery2}")
         print(f"Стоимость: {delivery2.cost} руб.")
         print(f"Время доставки: {delivery2.estimated_time}")
-        print(f"Расстояние: {delivery2._calculate_total_distance():.1f} км")
+        print(f"Расстояние: {delivery2.distance:.1f} км")
 
         print("\n3.Поиск транспорта:")
         suitable = system.find_suitable_transports(cargo2)

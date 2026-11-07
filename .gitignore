@@ -1,0 +1,10 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# Datasets are downloaded separately; keep local copies outside version control.
+*.csv
+*.tsv
+*.parquet
+lesson_16/data/
